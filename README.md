@@ -1,8 +1,8 @@
 # niftispace
 A simple set classes to read/write nifti files from Matlab 
 
-niftifile.m — a Matlab class that reads and writes *.nii files. 
-niftispace.m — a class that can read/write any *.nii file in a directly as a Matlab struct-like object 
+* niftifile.m — a Matlab class that reads and writes *.nii files. 
+* niftispace.m — a class that can read/write any *.nii file in a directly as a Matlab struct-like object 
 
 # Issues
 
