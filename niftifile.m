@@ -1,4 +1,4 @@
-classdef niftifile < handle
+classdef niftifile < dynamicprops
     % niftifile is a minimalist class container to read/write nifti-1 files
     %
     % Example:
@@ -6,17 +6,17 @@ classdef niftifile < handle
     % 
     % nf.img = image data in single or double format. real/complex are
     %   supported
-    % nf.pars = struct of metadata to be stored in a nifti extension header 
-    %   as json text
     %
     % or:
-    % nf = niftifile('file.nii',img,pars);
+    % nf = niftifile('file.nii',data);
+    % where data is any struct-like matlab oject containting a field 'img' 
+    % of numeric image data. All other fields in the structure are
+    % converted to json and saved in the nifti extension header
     %
     % by Kevin Harkins (kevin.harkins@vanderbilt.edu)
     
     properties
         filepath % the name used to store the data 
-        pars = []; 
         img = [];
     end
     
@@ -28,8 +28,8 @@ classdef niftifile < handle
     end
     
     methods
-        function obj = niftifile(fname,data,pars)
-            % niftifile(fname,data,pars), constructor
+        function obj = niftifile(fname,data)
+            % niftifile(fname,data), constructor
             %   fname = a required alphanumeric string, where the first 
             %   character must be a letter. 
             
@@ -52,7 +52,7 @@ classdef niftifile < handle
             obj.bitcode('double') = 64;
             obj.bitcode('double complex') = 128;
             
-            if exist(fname,'var') || isempty(fname)
+            if ~exist('fname','var') || isempty(fname)
                 error('niftifile() requires a filename');
             elseif ischar(fname)
                 obj.filepath = fname;
@@ -60,22 +60,27 @@ classdef niftifile < handle
                 error('"fname" must be a character string');
             end
             
+            % check to make sure we aren't writing over any saved data
+            if exist('fname','file') && exist('data','var')
+                error('file %s already exists',fname)
+            end
+            
             if exist('data','var')
-                if isnumeric(data)
-                    obj.img = data;
+                if isnumeric(data.img)
+                    obj.img = data.img;
                 else
                     error('img must be numeric')
                 end
                 
-                if exist('pars','var')
-                    if isstruct(pars)
-                        obj.pars = pars;
-                    else
-                        error('pars must be a struct')
+                fns = fieldnames(data);
+                for n = 1:length(fns)
+                    if strcmp(fns{n},'img')
+                        continue;
                     end
-                else
-                    obj.pars = struct();
+                    obj.addprop(fns{n});
+                    obj.(fns{n}) = data.(fns{n});
                 end
+
                 obj.dirty = true;
                 
                 obj.write();
@@ -93,6 +98,20 @@ classdef niftifile < handle
             end
         end
         
+        function js = jsondynprops(obj)
+            props = properties(obj);
+            save_struc = struct;
+            for n=1:length(props)
+                if strcmp(props{n},'filepath') || strcmp(props{n},'img')
+                    continue;
+                end
+                save_struc.(props{n}) = obj.(props{n});
+            end
+              
+            % get size of the header extension 
+            js = jsonencode(save_struc);
+        end
+        
         
         function obj = subsasgn(obj,a,val)
             obj.dirty = true;
@@ -105,12 +124,10 @@ classdef niftifile < handle
                     else
                         error('img must be numeric')
                     end
-                elseif strcmp(a(1).subs,'pars')
-                    if isstruct(val)
-                        obj.pars = val;
-                    else
-                        error('pars must be a struct')
-                    end
+                elseif ~isprop(obj,a(1).subs)
+                    % we need to create this property
+                    obj.addprop(a(1).subs);
+                    obj.(a(1).subs) = val;
                 else
                     % carry on
                     obj = builtin('subsasgn',obj,a,val);
@@ -163,9 +180,10 @@ classdef niftifile < handle
             hdr.slice_start = int16(0);
             
             hdr.pixdim = single([1 1 1 1 1 1 1 1]);
-            if ~isempty(obj.pars)
-                hdre_sz = length(jsonencode(obj.pars)) + 8;
-                hdre_sz = ceil(hdre_sz/16)*16;
+            js = jsondynprops(obj);
+            if ~isempty(js)
+                hdre_sz = length(js) + 8;
+                hdre_sz = ceil(hdre_sz/16)*16; % must be a multiple of 16
             else
                 hdre_sz = 0;
             end
@@ -260,17 +278,13 @@ classdef niftifile < handle
                 error('something is wrong')
             end
             
-            % write the pars header exentsion
-              
+            % write the header exentsion
+            
             % get size of the header extension 
-            if isempty(obj.pars)
-                extsz = 0;
-            else
-                js = jsonencode(obj.pars);
-                extsz = length(js)+8;
-                extsz = ceil(extsz/16)*16;
-                js(extsz-8) = ' ';
-            end
+            js = jsondynprops(obj);
+            extsz = length(js)+8;
+            extsz = ceil(extsz/16)*16;
+            js(extsz-8) = ' ';
             
             if extsz > 0
                 fwrite(fid,char([1 0 0 0]),'char');
@@ -365,8 +379,6 @@ classdef niftifile < handle
             
             hdr = obj.readheader();
             
-            obj.pars = struct();
-            
             if hdr.vox_offset == 352
                 % there are no extensions
                 return
@@ -409,7 +421,8 @@ classdef niftifile < handle
                     istr = jsondecode(edata);
                     f = fieldnames(istr);
                     for n=1:length(f)
-                        obj.pars.(f{n}) = istr.(f{n});
+                        obj.addprop(f{n});
+                        obj.(f{n}) = istr.(f{n});
                     end
                 end
                 i = i+1;

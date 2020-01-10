@@ -14,7 +14,8 @@ classdef niftispace < dynamicprops
     %
     % where test is any struct like object that contains: 
     % test.img = numeric image data
-    % test.pars = optional struct of meta data
+    % any other data stored in test is converted to json in niftifile and
+    % stored in an extension header
     %
     % by Kevin Harkins (kevin.harkins@vanderbilt.edu)
     
@@ -64,13 +65,9 @@ classdef niftispace < dynamicprops
                 % this item already exists
                 
                 if numel(a) == 1
-                    if isa(val,'niftifile')
+                    if isa(val,'niftifile') || isstruct(val)
                         % assign niftifile object directly
                         obj.(a(1).subs) = val;
-                    elseif isstruct(val)
-                        % copy struct like properties into niftifile
-                        obj.(a(1).subs).img = val.img;
-                        obj.(a(1).subs).pars = val.pars;
                     else
                         error('value cannot be assigned');
                     end
@@ -88,18 +85,12 @@ classdef niftispace < dynamicprops
                     error('assigned structure is not the correct format');
                 end
                 
-                % val should be a struct like object, containing two fields:
-                % img and pars
+                % val should be a struct like object, containing the field
+                % img
                 try
                     val.img;
                 catch
                     error('img property required');
-                end
-                
-                try
-                    val.pars;
-                catch
-                    val.pars = struct(); % parameter structure is optional
                 end
                 
                 if ~isvarname(a(1).subs)
@@ -107,7 +98,7 @@ classdef niftispace < dynamicprops
                 end
                 
                 fname = fullfile(obj.folderpath,[a(1).subs '.nii']);
-                nf = niftifile(fname,val.img,val.pars);
+                nf = niftifile(fname,val);
                 
                 % create and assign the property
                 obj.addprop(a(1).subs);

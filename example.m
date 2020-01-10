@@ -1,12 +1,12 @@
 clearvars
 
 %% example data set to save as a nifti file
-img = rand(100,100);
-pars.text = 'data saved in matlab structure'; 
-pars.te = 10:10:100; % numeric meta data
+data.img = rand(100,100); % image data
+data.text = 'meta data to be saved'; 
+data.pars.te = 10:10:100; % numeric meta data
 
 %% save data into a nifti file
-f = niftifile('test.nii',img,pars);
+f = niftifile('test.nii',data);
 
 %% clear the workspace
 clearvars
@@ -27,7 +27,7 @@ ns.test.pars.te
 %% nifti files can also be created directly from niftispace
 
 d.img = rand(100,100);
-d.pars.text = 'more meta data to be saved';
+d.text = 'more meta data to be saved';
 
 % this will be saved in test2.nii
 ns.test2 = d;
